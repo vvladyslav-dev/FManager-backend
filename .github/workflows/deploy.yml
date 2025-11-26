@@ -19,6 +19,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          auth-type: service-principal
 
       - name: Login to ACR
         uses: azure/docker-login@v2
@@ -33,4 +34,3 @@ jobs:
           docker buildx build --platform linux/amd64 \
             -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/fmanager:latest \
             -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/fmanager:${{ github.sha }} \
-            --push .
