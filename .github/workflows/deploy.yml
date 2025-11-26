@@ -15,13 +15,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Azure Login (OIDC)
+      - name: Azure Login (Federated SP)
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          auth-type: OIDC
+          # OIDC federated service principal: omit auth-type and client-secret.
 
       - name: Login to ACR
         uses: azure/docker-login@v2
@@ -31,7 +31,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and Push
+      - name: Build and Push (latest + sha)
         run: |
           docker buildx build --platform linux/amd64 \
             -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/fmanager:latest \
