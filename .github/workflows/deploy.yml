@@ -1,11 +1,11 @@
-name: Build and Push Image
+name: Build, Push Image and Deploy
 
 on:
   push:
     branches: ["main"]
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -39,3 +39,10 @@ jobs:
             -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/fmanager:latest \
             -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/fmanager:${{ github.sha }} \
             --push .
+
+      - name: Deploy to Azure Container App
+        run: |
+          az containerapp update \
+            --name ${{ secrets.AZURE_CONTAINERAPP_NAME }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --image ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/fmanager:${{ github.sha }}
