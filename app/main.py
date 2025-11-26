@@ -6,7 +6,10 @@ from app.api.routes import forms_router, users_router, auth_router, super_admin_
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    debug=settings.debug
+    debug=settings.debug,
+    docs_url="/docs" if settings.environment != "production" else None,
+    redoc_url="/redoc" if settings.environment != "production" else None,
+    openapi_url="/openapi.json" if settings.environment != "production" else None
 )
 
 # CORS middleware
