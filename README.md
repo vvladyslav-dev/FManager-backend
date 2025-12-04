@@ -1,6 +1,8 @@
 # FManager Backend
 
-Backend API for form management system.
+REST API for a dynamic form management system with role-based access control and real-time Telegram notifications.
+
+The application enables administrators to create custom forms with various field types (text, email, file uploads, etc.), manage user permissions, and track form submissions. Forms can be shared publicly via unique links, allowing anyone to submit responses without authentication. When a user submits a form, the system stores the data in PostgreSQL, uploads files to Azure Blob Storage, and sends instant notifications to designated Telegram channels, allowing teams to respond quickly to new entries.
 
 ## Technologies
 
@@ -11,180 +13,77 @@ Backend API for form management system.
 - Alembic
 - Docker & Docker Compose
 
-## Installation and Setup
+## Quick Start
 
-### 1. Clone the repository
+### Environment Setup
 
-```bash
-git clone <repository-url>
-cd FManager-backend
-```
-
-### 2. Environment variables setup
-
-Create a `.env` file in the project root:
+Create `.env` file:
 
 ```env
-# Required
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/fmanager_db
 SECRET_KEY=your-secret-key
 AZURE_STORAGE_CONNECTION_STRING=your-azure-connection-string
 
-# Optional - Telegram Notifications
-# Leave empty or omit these lines if you don't want to use Telegram notifications
-TELEGRAM_BOT_TOKEN=your-bot-token-from-botfather
-TELEGRAM_BOT_WEBHOOK_URL=https://yourdomain.com/api/v1/telegram/webhook
+# Optional - Telegram Bot (leave empty to disable)
+TELEGRAM_BOT_TOKEN=
 FRONTEND_URL=http://localhost:3000
 ```
 
-### 3. Run with Docker
+### Run Locally
 
 ```bash
-# Start all services
-docker compose up -d
+# Start services
+docker compose up
 
-# View logs
-docker compose logs -f backend
-
-# Stop services
-docker compose down
-```
-
-API will be available at: http://localhost:8000
-
-API Documentation: http://localhost:8000/docs
-
-## Working with Alembic Migrations
-
-### Apply migrations (upgrade)
-
-```bash
-# Apply all migrations to the latest version
+# Run migrations
 docker compose exec backend alembic upgrade head
-
-# Apply one migration forward
-docker compose exec backend alembic upgrade +1
-
-# Apply migration to a specific version
-docker compose exec backend alembic upgrade <revision_id>
 ```
 
-### Rollback migrations (downgrade)
+API: http://localhost:8000  
+Docs: http://localhost:8000/docs
 
-```bash
-# Rollback all migrations
-docker compose exec backend alembic downgrade base
+## CI/CD Pipeline
 
-# Rollback one migration
-docker compose exec backend alembic downgrade -1
+The project uses **GitHub Actions** for automated deployment to Azure.
 
-# Rollback to a specific version
-docker compose exec backend alembic downgrade <revision_id>
-```
+**Pipeline workflow** (`.github/workflows/deploy.yml`):
+1. Build Docker image
+2. Push to Azure Container Registry
+3. Deploy to Azure Container Apps
 
-### Create a new migration
+**Triggers:** Push to `main` branch
 
-```bash
-# Auto-generate migration based on model changes
-docker compose exec backend alembic revision --autogenerate -m "migration_description"
+### Database Migrations in Production
 
-# Create an empty migration
-docker compose exec backend alembic revision -m "migration_description"
-```
+⚠️ Currently, production database migrations are applied **manually** 
 
-### View migration history
-
-```bash
-# Show current database version
-docker compose exec backend alembic current
-
-# Show migration history
-docker compose exec backend alembic history
-
-# Show details of a specific migration
-docker compose exec backend alembic show <revision_id>
-```
+Future improvement: Automate migrations via entrypoint script or init container.
 
 ## Development
 
-### Project structure
+### Project Structure
 
 ```
 app/
-├── api/              # API endpoints and schemas
-├── application/      # Application layer (handlers)
-├── core/            # Configuration and dependencies
-├── domain/          # Domain models and repositories (interfaces)
-└── infrastructure/  # Repository implementations
+├── api/              # API routes and schemas
+├── application/      # Use cases and handlers
+├── core/            # Configuration, DI container
+├── domain/          # Domain models, events, repositories
+└── infrastructure/  # Repository implementations, external services
 ```
 
-### Run tests
+### Useful Commands
 
 ```bash
-# Run all tests
+# View logs
+docker compose logs -f backend
+
+# Create new migration
+docker compose exec backend alembic revision --autogenerate -m "description"
+
+# Run tests
 docker compose exec backend pytest
 
-# Run with coverage
-docker compose exec backend pytest --cov=app
-
-# Run a specific test
-docker compose exec backend pytest tests/test_form_management.py
-```
-
-### Connect to database
-
-```bash
-# Connect to PostgreSQL via psql
+# Connect to database
 docker compose exec db psql -U postgres -d fmanager_db
-```
-
-## Useful commands
-
-```bash
-# Rebuild containers
-docker compose up --build
-
-# View running containers
-docker compose ps
-
-# View logs of a specific service
-docker compose logs -f backend
-docker compose logs -f db
-
-# Stop and remove all containers with volumes
-docker compose down -v
-
-# Execute a command inside a container
-docker compose exec backend <command>
-```
-
-## Troubleshooting
-
-### Migration issues
-
-If migrations don't apply or conflicts occur:
-
-```bash
-# 1. Check current database version
-docker compose exec backend alembic current
-
-# 2. View migration history
-docker compose exec backend alembic history
-
-# 3. Rollback and reapply if necessary
-docker compose exec backend alembic downgrade base
-docker compose exec backend alembic upgrade head
-```
-
-### Database connection issues
-
-```bash
-# Check container status
-docker compose ps
-
-# Check database logs
-docker compose logs db
-
-# Restart services
-docker compose restart
 ```

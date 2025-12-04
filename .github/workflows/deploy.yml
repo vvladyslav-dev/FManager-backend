@@ -1,56 +1,48 @@
-name: Deploy Backend to Azure Container Apps
+name: Build, Push Image and Deploy
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
-
-env:
-  AZURE_CONTAINER_REGISTRY: ${{ secrets.AZURE_CONTAINER_REGISTRY }}
-  CONTAINER_APP_NAME: ${{ secrets.CONTAINER_APP_NAME }}
-  RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+    branches: ["main"]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Log in to Azure
+      - name: Azure Login (Service Principal)
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
 
-      - name: Log in to Azure Container Registry
-        run: az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+      - name: Login to ACR
+        uses: azure/docker-login@v2
+        with:
+          login-server: ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io
+          username: ${{ secrets.AZURE_CLIENT_ID }}
+          password: ${{ secrets.AZURE_CLIENT_SECRET }}
 
-      - name: Build Docker image
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push (latest + sha)
         run: |
-          docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:${{ github.sha }} .
-          docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:latest .
+          docker buildx build --platform linux/amd64 \
+            -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/fmanager:latest \
+            -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/fmanager:${{ github.sha }} \
+            --push .
 
-      - name: Run Alembic Migrations
-        run: |
-          docker run --rm \
-            -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-            -e SECRET_KEY="pipeline-secret-key" \
-            -e TELEGRAM_BOT_TOKEN="dummy" \
-            -e AZURE_STORAGE_CONNECTION_STRING="dummy" \
-            -e AZURE_STORAGE_CONTAINER_NAME="dummy" \
-            ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:${{ github.sha }} \
-            alembic upgrade head
-
-      - name: Push Docker image
-        run: |
-          docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:${{ github.sha }}
-          docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:latest
-
-      - name: Deploy to Azure Container Apps
+      - name: Deploy to Azure Container App
         run: |
           az containerapp update \
-            --name ${{ env.CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:${{ github.sha }}
+            --name ${{ secrets.AZURE_CONTAINERAPP_NAME }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --image ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/fmanager:${{ github.sha }}
