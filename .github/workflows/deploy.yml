@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'FManager-backend/**'
   workflow_dispatch:
 
 env:
@@ -17,6 +15,10 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     
+    defaults:
+      run:
+        working-directory: .
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,16 +29,12 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies for migrations
-        run: |
-          cd FManager-backend
-          pip install alembic psycopg2-binary sqlalchemy
+        run: pip install alembic psycopg2-binary sqlalchemy
 
       - name: Run Alembic Migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          cd FManager-backend
-          alembic upgrade head
+        run: alembic upgrade head
 
       - name: Log in to Azure
         uses: azure/login@v2
@@ -44,12 +42,10 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Log in to Azure Container Registry
-        run: |
-          az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+        run: az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
 
       - name: Build and push Docker image
         run: |
-          cd FManager-backend
           docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:${{ github.sha }} .
           docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:latest .
           docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:${{ github.sha }}
