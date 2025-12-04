@@ -19,25 +19,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run Alembic Migrations
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SECRET_KEY: "pipeline-secret-key"
-          TELEGRAM_BOT_TOKEN: "dummy"
-          AZURE_STORAGE_CONNECTION_STRING: "dummy"
-          AZURE_STORAGE_CONTAINER_NAME: "dummy"
-        run: alembic upgrade head
-
       - name: Log in to Azure
         uses: azure/login@v2
         with:
@@ -46,10 +27,24 @@ jobs:
       - name: Log in to Azure Container Registry
         run: az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
 
-      - name: Build and push Docker image
+      - name: Build Docker image
         run: |
           docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:${{ github.sha }} .
           docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:latest .
+
+      - name: Run Alembic Migrations
+        run: |
+          docker run --rm \
+            -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            -e SECRET_KEY="pipeline-secret-key" \
+            -e TELEGRAM_BOT_TOKEN="dummy" \
+            -e AZURE_STORAGE_CONNECTION_STRING="dummy" \
+            -e AZURE_STORAGE_CONTAINER_NAME="dummy" \
+            ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:${{ github.sha }} \
+            alembic upgrade head
+
+      - name: Push Docker image
+        run: |
           docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:${{ github.sha }}
           docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/fmanager-backend:latest
 
