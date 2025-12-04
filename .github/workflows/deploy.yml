@@ -46,3 +46,10 @@ jobs:
             --name ${{ secrets.AZURE_CONTAINERAPP_NAME }} \
             --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
             --image ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/fmanager:${{ github.sha }}
+
+      - name: Run Alembic Migrations
+        run: |
+          az containerapp exec \
+            --name ${{ secrets.AZURE_CONTAINERAPP_NAME }} \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --command "alembic upgrade head"

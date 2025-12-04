@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
 from app.domain.models import FormSubmission
@@ -11,15 +10,15 @@ class IFormSubmissionRepository(ABC):
         pass
     
     @abstractmethod
-    async def get_by_id(self, submission_id: UUID) -> Optional[FormSubmission]:
+    async def get_by_id(self, submission_id: UUID) -> FormSubmission | None:
         pass
     
     @abstractmethod
-    async def get_by_form_id(self, form_id: UUID, skip: int = 0, limit: int = 10) -> List[FormSubmission]:
+    async def get_by_form_id(self, form_id: UUID, skip: int = 0, limit: int = 10) -> list[FormSubmission]:
         pass
     
     @abstractmethod
-    async def get_by_user_id(self, user_id: UUID, skip: int = 0, limit: int = 10) -> List[FormSubmission]:
+    async def get_by_user_id(self, user_id: UUID, skip: int = 0, limit: int = 10) -> list[FormSubmission]:
         pass
     
     @abstractmethod
@@ -28,13 +27,13 @@ class IFormSubmissionRepository(ABC):
         admin_id: UUID, 
         skip: int = 0, 
         limit: int = 10,
-        date_from: Optional[datetime] = None,
-        date_to: Optional[datetime] = None,
-        user_name: Optional[str] = None,
-        user_email: Optional[str] = None,
-        field_value_search: Optional[str] = None,
-        form_id: Optional[UUID] = None
-    ) -> List[FormSubmission]:
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        user_name: str | None = None,
+        user_email: str | None = None,
+        field_value_search: str | None = None,
+        form_id: UUID | None = None
+    ) -> list[FormSubmission]:
         pass
     
     @abstractmethod

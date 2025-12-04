@@ -1,33 +1,37 @@
-from dataclasses import dataclass, field
 from uuid import UUID
-from typing import List, Optional, Dict, Any
+from typing import Any
 from datetime import datetime
-from mediatr import GenericQuery
+from pydantic import BaseModel
+from mediatr import GenericQuery, Mediator
+from dependency_injector.wiring import inject, Provide
 
 from app.application.ports.usecase import UseCase
 from app.domain.models import Form, FormField
 from app.domain.repositories.form_repository import IFormRepository
+from app.application.dto.models import FormDTO, FormFieldDTO
+from typing import TYPE_CHECKING
+from app.core.container import Container  # noqa: F401
 
 
-@dataclass
-class UpdateFormResponse:
+class UpdateFormResponse(BaseModel):
     """Response containing updated form."""
-    form: Form
+    form: FormDTO
 
 
-@dataclass
-class UpdateFormRequest(GenericQuery[UpdateFormResponse]):
+class UpdateFormRequest(BaseModel, GenericQuery[UpdateFormResponse]):
     """Request for updating a form."""
     form_id: UUID
-    title: Optional[str] = None
-    description: Optional[str] = None
-    fields: Optional[List[Dict[str, Any]]] = None
+    title: str | None = None
+    description: str | None = None
+    fields: list[dict[str, Any]] | None = None
 
 
+@Mediator.handler
 class UpdateFormHandler(UseCase[UpdateFormRequest, UpdateFormResponse]):
     """Use case for updating a form."""
     
-    def __init__(self, form_repository: IFormRepository):
+    @inject
+    def __init__(self, form_repository: IFormRepository = Provide[Container.form_repository]):
         self.form_repository = form_repository
     
     async def handle(self, request: UpdateFormRequest) -> UpdateFormResponse:
@@ -45,8 +49,10 @@ class UpdateFormHandler(UseCase[UpdateFormRequest, UpdateFormResponse]):
         
         # Update fields if provided
         if request.fields is not None:
-            # Clear existing fields
-            form.fields.clear()
+            # Clear existing fields - need to delete them explicitly
+            existing_fields = list(form.fields)
+            for field in existing_fields:
+                form.fields.remove(field)
             
             # Add new fields
             for idx, field_data in enumerate(request.fields):
@@ -63,5 +69,25 @@ class UpdateFormHandler(UseCase[UpdateFormRequest, UpdateFormResponse]):
                 form.fields.append(field)
         
         updated_form = await self.form_repository.update(form)
-        return UpdateFormResponse(form=updated_form)
+        form_dto = FormDTO(
+            id=updated_form.id,
+            title=updated_form.title,
+            description=updated_form.description,
+            creator_id=updated_form.creator_id,
+            created_at=updated_form.created_at,
+            updated_at=updated_form.updated_at,
+            fields=[
+                FormFieldDTO(
+                    id=f.id,
+                    field_type=f.field_type,
+                    label=f.label,
+                    name=f.name,
+                    is_required=f.is_required,
+                    order=f.order,
+                    options=f.options,
+                    placeholder=getattr(f, 'placeholder', None)
+                ) for f in updated_form.fields
+            ]
+        )
+        return UpdateFormResponse(form=form_dto)
 

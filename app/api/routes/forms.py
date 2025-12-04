@@ -1,200 +1,112 @@
+from typing import cast
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, Form, Response, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-import json
+import unicodedata
+from urllib.parse import quote
+import os
+from mediatr import Mediator
 import logging
+import traceback
 from datetime import datetime
-from typing import Optional
 
-from app.core.database import get_db
-from app.core.container import create_container_with_session
-from app.infrastructure.repositories.file_repository import FileRepository
-from app.infrastructure.repositories.form_submission_repository import FormSubmissionRepository
-from app.core.azure_storage import azure_storage_client
-from app.application.handlers.forms.create_form_handler import CreateFormHandler, CreateFormRequest
-from app.application.handlers.forms.get_form_handler import GetFormHandler, GetFormRequest
-from app.application.handlers.forms.get_forms_by_creator_handler import GetFormsByCreatorHandler, GetFormsByCreatorRequest
-from app.application.handlers.forms.update_form_handler import UpdateFormHandler, UpdateFormRequest
-from app.application.handlers.forms.delete_form_handler import DeleteFormHandler, DeleteFormRequest
-from app.application.handlers.submissions.submit_form_handler import SubmitFormHandler, SubmitFormRequest
-from app.application.handlers.submissions.get_submissions_by_admin_handler import GetSubmissionsByAdminHandler, GetSubmissionsByAdminRequest
-from app.application.handlers.submissions.get_submissions_by_form_handler import GetSubmissionsByFormHandler, GetSubmissionsByFormRequest
-from app.application.handlers.submissions.delete_submission_handler import DeleteSubmissionHandler, DeleteSubmissionRequest
-from app.api.schemas import (
-    FormSchema,
-    CreateFormRequest as CreateFormAPIRequest,
-    UpdateFormRequest as UpdateFormAPIRequest,
-    FormSubmissionSchema,
-)
+from app.application.handlers.forms.create_form_handler import CreateFormRequest, CreateFormResponse
+from app.application.handlers.forms.get_form_handler import GetFormRequest, GetFormResponse
+from app.application.handlers.forms.get_forms_by_creator_handler import GetFormsByCreatorRequest, GetFormsByCreatorResponse
+from app.application.handlers.forms.update_form_handler import UpdateFormRequest, UpdateFormResponse
+from app.application.handlers.forms.delete_form_handler import DeleteFormRequest, DeleteFormResponse
+from app.application.handlers.submissions.submit_form_handler import SubmitFormRequest, SubmitFormResponse
+from app.application.handlers.submissions.get_submissions_by_admin_handler import GetSubmissionsByAdminRequest, GetSubmissionsByAdminResponse
+from app.application.handlers.submissions.get_submissions_by_form_handler import GetSubmissionsByFormRequest, GetSubmissionsByFormResponse
+from app.application.handlers.submissions.get_submission_handler import GetSubmissionRequest, GetSubmissionResponse
+from app.application.handlers.submissions.delete_submission_handler import DeleteSubmissionRequest, DeleteSubmissionResponse
+from app.application.handlers.submissions.export_submission_handler import ExportSubmissionRequest
+from app.application.handlers.submissions.get_submission_count_handler import GetSubmissionCountRequest, GetSubmissionCountResponse
+from app.application.handlers.files.view_file_handler import ViewFileRequest, ViewFileResponse
+from app.core.dependencies import get_current_user
+from app.domain.models import User
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Forms"])
 
 
-# Dependency injection functions using container
-def get_create_form_handler(db: AsyncSession = Depends(get_db)) -> CreateFormHandler:
-    cont = create_container_with_session(db)
-    return cont.create_form_handler()
-
-
-def get_get_form_handler(db: AsyncSession = Depends(get_db)) -> GetFormHandler:
-    cont = create_container_with_session(db)
-    return cont.get_form_handler()
-
-
-def get_submit_form_handler(db: AsyncSession = Depends(get_db)) -> SubmitFormHandler:
-    cont = create_container_with_session(db)
-    return cont.submit_form_handler()
-
-
-def get_submissions_by_admin_handler(db: AsyncSession = Depends(get_db)) -> GetSubmissionsByAdminHandler:
-    cont = create_container_with_session(db)
-    return cont.get_submissions_by_admin_handler()
-
-
-def get_submissions_by_form_handler(db: AsyncSession = Depends(get_db)) -> GetSubmissionsByFormHandler:
-    cont = create_container_with_session(db)
-    return cont.get_submissions_by_form_handler()
-
-
-def get_delete_submission_handler(db: AsyncSession = Depends(get_db)) -> DeleteSubmissionHandler:
-    cont = create_container_with_session(db)
-    return cont.delete_submission_handler()
-
-
-def get_forms_by_creator_handler(db: AsyncSession = Depends(get_db)) -> GetFormsByCreatorHandler:
-    cont = create_container_with_session(db)
-    return cont.get_forms_by_creator_handler()
-
-
-def get_update_form_handler(db: AsyncSession = Depends(get_db)) -> UpdateFormHandler:
-    cont = create_container_with_session(db)
-    return cont.update_form_handler()
-
-
-def get_delete_form_handler(db: AsyncSession = Depends(get_db)) -> DeleteFormHandler:
-    cont = create_container_with_session(db)
-    return cont.delete_form_handler()
-
-
-def get_file_repository(db: AsyncSession = Depends(get_db)) -> FileRepository:
-    return FileRepository(db)
-
-
-def get_form_submission_repository(db: AsyncSession = Depends(get_db)) -> FormSubmissionRepository:
-    return FormSubmissionRepository(db)
-
-
-@router.get("/forms/{form_id}/submissions/count")
+@router.get("/forms/{form_id}/submissions/count", response_model=GetSubmissionCountResponse)
 async def get_submission_count(
     form_id: UUID,
-    submission_repository: FormSubmissionRepository = Depends(get_form_submission_repository)
 ):
     """Get submission count for a specific form"""
-    count = await submission_repository.count_by_form_id(form_id)
-    return {"count": count}
+    use_case_request = GetSubmissionCountRequest(form_id=form_id)
+    response = cast(GetSubmissionCountResponse, await Mediator.send_async(use_case_request))
+    return response
 
 
-@router.post("/forms", response_model=FormSchema)
+@router.post("/forms", response_model=CreateFormResponse)
 async def create_form(
-    request: CreateFormAPIRequest,
-    creator_id: UUID,
-    handler: CreateFormHandler = Depends(get_create_form_handler)
+    request: CreateFormRequest,
+    current_user: User = Depends(get_current_user),
 ):
     """Create a new form (admin only)"""
-    use_case_request = CreateFormRequest(
-        title=request.title,
-        description=request.description,
-        creator_id=creator_id,
-        fields=request.fields
-    )
-    response = await handler.handle(use_case_request)
-    return response.form
+    # Set creator_id from authenticated user
+    request.creator_id = current_user.id
+    response = cast(CreateFormResponse, await Mediator.send_async(request))
+    return response
 
 
-@router.get("/forms/{form_id}", response_model=FormSchema)
+@router.get("/forms/{form_id}", response_model=GetFormResponse)
 async def get_form(
     form_id: UUID,
-    handler: GetFormHandler = Depends(get_get_form_handler)
 ):
     """Get form by ID (public endpoint, no auth required)"""
     use_case_request = GetFormRequest(form_id=form_id)
-    response = await handler.handle(use_case_request)
-    if not response.form:
-        raise HTTPException(status_code=404, detail="Form not found")
-    return response.form
+    response = cast(GetFormResponse, await Mediator.send_async(use_case_request))
+    # Return 200 with form=None when not found (for public access)
+    return response
 
 
-@router.post("/forms/{form_id}/submit", response_model=FormSubmissionSchema)
+@router.post("/forms/{form_id}/submit", response_model=SubmitFormResponse)
 async def submit_form(
     form_id: UUID,
     user_name: str = Form(...),
     user_email: str | None = Form(None),
-    field_values: str | None = Form(None),  # JSON string
-    file_fields: str | None = Form(None),  # JSON string mapping file index to field_id
+    field_values_json: str | None = Form(None),  # JSON string
+    file_fields_json: str | None = Form(None),  # JSON string mapping file index to field_id
     files: list[UploadFile] | None = FastAPIFile(None),
-    handler: SubmitFormHandler = Depends(get_submit_form_handler)
 ):
     """Submit a form (public endpoint, no auth required)
     
     field_values should be JSON like {"field-uuid-1": "value1", "field-uuid-2": "value2"}
     file_fields should be JSON like {"0": "field-uuid-1", "1": "field-uuid-2"} mapping file index to field_id
     """
-    try:
-        field_values_dict = json.loads(field_values) if field_values else {}
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid field_values JSON")
-    
-    files_dict = {}
-    if files and file_fields:
-        try:
-            file_fields_dict = json.loads(file_fields)
-            for idx, file in enumerate(files):
-                field_id_str = file_fields_dict.get(str(idx))
-                if field_id_str:
-                    content = await file.read()
-                    files_dict[field_id_str] = {
-                        "content": content,
-                        "filename": file.filename or "file"
-                    }
-        except json.JSONDecodeError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid file_fields JSON: {str(e)}")
-    elif files and not file_fields:
-        # If files are provided but file_fields mapping is missing
-        raise HTTPException(status_code=400, detail="file_fields mapping is required when files are uploaded")
-    
     use_case_request = SubmitFormRequest(
         form_id=form_id,
         user_name=user_name,
         user_email=user_email,
-        field_values=field_values_dict,
-        files=files_dict if files_dict else None
+        field_values_json=field_values_json,
+        file_fields_json=file_fields_json,
+        files=files
     )
     
     try:
-        response = await handler.handle(use_case_request)
-        return response.submission
+        response = cast(SubmitFormResponse, await Mediator.send_async(use_case_request))
+        return response
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        import traceback
         logger.error(f"Unexpected error submitting form: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
-@router.get("/admin/{admin_id}/submissions", response_model=list[FormSubmissionSchema])
+@router.get("/admin/{admin_id}/submissions", response_model=GetSubmissionsByAdminResponse)
 async def get_submissions_by_admin(
     admin_id: UUID,
     skip: int = 0,
     limit: int = 10,
-    date_from: Optional[datetime] = Query(None, description="Filter submissions from this date"),
-    date_to: Optional[datetime] = Query(None, description="Filter submissions until this date"),
-    user_name: Optional[str] = Query(None, description="Filter by user name (partial match)"),
-    user_email: Optional[str] = Query(None, description="Filter by user email (partial match)"),
-    field_value_search: Optional[str] = Query(None, description="Search in form field values"),
-    form_id: Optional[UUID] = Query(None, description="Filter by form ID"),
-    handler: GetSubmissionsByAdminHandler = Depends(get_submissions_by_admin_handler)
+    date_from: datetime | None = Query(None, description="Filter submissions from this date"),
+    date_to: datetime | None = Query(None, description="Filter submissions until this date"),
+    user_name: str | None = Query(None, description="Filter by user name (partial match)"),
+    user_email: str | None = Query(None, description="Filter by user email (partial match)"),
+    field_value_search: str | None = Query(None, description="Search in form field values"),
+    form_id: UUID | None = Query(None, description="Filter by form ID"),
 ):
     """Get all submissions for forms created by admin or submitted by users linked to admin"""
     use_case_request = GetSubmissionsByAdminRequest(
@@ -208,78 +120,126 @@ async def get_submissions_by_admin(
         field_value_search=field_value_search,
         form_id=form_id
     )
-    response = await handler.handle(use_case_request)
-    return response.submissions
+    response = cast(GetSubmissionsByAdminResponse, await Mediator.send_async(use_case_request))
+    return response
 
 
-@router.get("/forms/{form_id}/submissions", response_model=list[FormSubmissionSchema])
+@router.get("/forms/{form_id}/submissions", response_model=GetSubmissionsByFormResponse)
 async def get_submissions_by_form(
     form_id: UUID,
-    handler: GetSubmissionsByFormHandler = Depends(get_submissions_by_form_handler)
 ):
     """Get all submissions for a specific form"""
     use_case_request = GetSubmissionsByFormRequest(form_id=form_id)
-    response = await handler.handle(use_case_request)
-    return response.submissions
+    response = cast(GetSubmissionsByFormResponse, await Mediator.send_async(use_case_request))
+    return response
 
 
-@router.delete("/submissions/{submission_id}")
+@router.get("/submissions/{submission_id}", response_model=GetSubmissionResponse)
+async def get_submission(
+    submission_id: UUID,
+):
+    """Get a submission by ID"""
+    try:
+        use_case_request = GetSubmissionRequest(submission_id=submission_id)
+        response = cast(GetSubmissionResponse, await Mediator.send_async(use_case_request))
+        return response
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/submissions/{submission_id}", response_model=DeleteSubmissionResponse)
 async def delete_submission(
     submission_id: UUID,
-    handler: DeleteSubmissionHandler = Depends(get_delete_submission_handler)
 ):
     """Delete a submission"""
     try:
         use_case_request = DeleteSubmissionRequest(submission_id=submission_id)
-        response = await handler.handle(use_case_request)
-        return {"success": response.success}
+        response = cast(DeleteSubmissionResponse, await Mediator.send_async(use_case_request))
+        return response
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.get("/admin/{creator_id}/forms", response_model=list[FormSchema])
+@router.get("/submissions/{submission_id}/export")
+async def export_submission(
+    submission_id: UUID,
+    format: str = Query(..., regex="^(csv|xlsx)$", description="Export format: csv or xlsx"),
+    locale: str = Query("en", regex="^(en|uk)$", description="Locale: en or uk"),
+):
+    """Export a submission to CSV or XLSX format"""
+    try:
+        use_case_request = ExportSubmissionRequest(
+            submission_id=submission_id,
+            format=format,  # type: ignore
+            locale=locale
+        )
+        response = await Mediator.send_async(use_case_request)
+        
+        # Build RFC 6266 compliant Content-Disposition for non-ASCII filenames
+        original_filename = response.filename
+        # ASCII fallback by stripping accents/non-ascii
+        ascii_fallback = unicodedata.normalize('NFKD', original_filename).encode('ascii', 'ignore').decode('ascii')
+        if not ascii_fallback:
+            base, ext = os.path.splitext(original_filename)
+            ascii_fallback = f"export{ext or ''}"  # ensure non-empty fallback
+        encoded_utf8 = quote(original_filename.encode('utf-8'))
+
+        content_disposition = (
+            f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded_utf8}"
+        )
+
+        return Response(
+            content=response.file_buffer.getvalue(),
+            media_type=response.media_type,
+            headers={
+                "Content-Disposition": content_disposition,
+            }
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/admin/{creator_id}/forms", response_model=GetFormsByCreatorResponse)
 async def get_forms_by_creator(
     creator_id: UUID,
     skip: int = 0,
     limit: int = 10,
-    handler: GetFormsByCreatorHandler = Depends(get_forms_by_creator_handler)
 ):
     """Get all forms created by a specific creator (admin only)"""
     use_case_request = GetFormsByCreatorRequest(creator_id=creator_id, skip=skip, limit=limit)
-    response = await handler.handle(use_case_request)
-    return response.forms
+    response = cast(GetFormsByCreatorResponse, await Mediator.send_async(use_case_request))
+    return response
 
 
-@router.put("/forms/{form_id}", response_model=FormSchema)
+@router.put("/forms/{form_id}", response_model=UpdateFormResponse)
 async def update_form(
     form_id: UUID,
-    request: UpdateFormAPIRequest,
-    handler: UpdateFormHandler = Depends(get_update_form_handler)
+    body: dict,
 ):
     """Update a form"""
     try:
-        use_case_request = UpdateFormRequest(
+        # Create request with form_id from path
+        request = UpdateFormRequest(
             form_id=form_id,
-            title=request.title,
-            description=request.description,
-            fields=request.fields
+            title=body.get("title"),
+            description=body.get("description"),
+            fields=body.get("fields")
         )
-        response = await handler.handle(use_case_request)
-        return response.form
+        response = cast(UpdateFormResponse, await Mediator.send_async(request))
+        return response
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.delete("/forms/{form_id}")
+@router.delete("/forms/{form_id}", response_model=DeleteFormResponse)
 async def delete_form(
     form_id: UUID,
-    handler: DeleteFormHandler = Depends(get_delete_form_handler)
 ):
     """Delete a form"""
     try:
         use_case_request = DeleteFormRequest(form_id=form_id)
-        response = await handler.handle(use_case_request)
-        return {"success": response.success}
+        response = cast(DeleteFormResponse, await Mediator.send_async(use_case_request))
+        return response
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -287,39 +247,32 @@ async def delete_form(
 @router.get("/files/{file_id}/view")
 async def view_file(
     file_id: UUID,
-    file_repository: FileRepository = Depends(get_file_repository)
 ):
     """View/download a file by ID. Supports inline viewing for PDFs, images, text files."""
-    file_record = await file_repository.get_by_id(file_id)
-    if not file_record:
-        raise HTTPException(status_code=404, detail="File not found")
-    
     try:
-        # Download file from Azure Blob Storage
-        blob_name = str(file_record.blob_name)
-        file_content = await azure_storage_client.download_file(blob_name)
+        use_case_request = ViewFileRequest(file_id=file_id)
+        response = cast(ViewFileResponse, await Mediator.send_async(use_case_request))
         
-        # Determine content type
-        content_type = str(file_record.content_type) if file_record.content_type is not None else "application/octet-stream"
-        
-        # For viewable files, use inline disposition; for others, use attachment
-        viewable_types = [
-            "application/pdf",
-            "image/",
-            "text/",
-            "application/json",
-        ]
-        is_viewable = any(content_type.startswith(t) for t in viewable_types)
-        
-        disposition = "inline" if is_viewable else "attachment"
-        
+        # Build RFC 6266 compliant Content-Disposition for non-ASCII filenames
+        original_filename = response.filename
+        ascii_fallback = unicodedata.normalize('NFKD', original_filename).encode('ascii', 'ignore').decode('ascii')
+        if not ascii_fallback:
+            base, ext = os.path.splitext(original_filename)
+            ascii_fallback = f"download{ext or ''}"
+        encoded_utf8 = quote(original_filename.encode('utf-8'))
+        content_disposition = (
+            f"{response.disposition}; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded_utf8}"
+        )
+
         return Response(
-            content=file_content,
-            media_type=content_type,
+            content=response.content,
+            media_type=response.content_type,
             headers={
-                "Content-Disposition": f'{disposition}; filename="{file_record.original_filename}"',
+                "Content-Disposition": content_disposition,
             }
         )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error downloading file {file_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error downloading file: {str(e)}")

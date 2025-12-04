@@ -1,27 +1,29 @@
-from dataclasses import dataclass
 from uuid import UUID
-from mediatr import GenericQuery
+from pydantic import BaseModel
+from mediatr import GenericQuery, Mediator
+from dependency_injector.wiring import inject, Provide
 
 from app.application.ports.usecase import UseCase
 from app.domain.repositories.user_repository import IUserRepository
+from app.core.container import Container
 
 
-@dataclass
-class RejectAdminResponse:
+class RejectAdminResponse(BaseModel):
     """Response indicating success of rejection."""
     success: bool
 
 
-@dataclass
-class RejectAdminRequest(GenericQuery[RejectAdminResponse]):
+class RejectAdminRequest(BaseModel, GenericQuery[RejectAdminResponse]):
     """Request for rejecting an admin user registration."""
     user_id: UUID
 
 
+@Mediator.handler
 class RejectAdminHandler(UseCase[RejectAdminRequest, RejectAdminResponse]):
     """Use case for rejecting an admin user registration (deletes the user)."""
     
-    def __init__(self, user_repository: IUserRepository):
+    @inject
+    def __init__(self, user_repository: IUserRepository = Provide[Container.user_repository]):
         self.user_repository = user_repository
     
     async def handle(self, request: RejectAdminRequest) -> RejectAdminResponse:

@@ -11,7 +11,7 @@ class UserRepository(IUserRepository):
     
     async def create(self, user: User) -> User:
         self.session.add(user)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(user)
         return user
     
@@ -34,7 +34,7 @@ class UserRepository(IUserRepository):
         return list(result.scalars().all())
     
     async def update(self, user: User) -> User:
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(user)
         return user
     
@@ -42,7 +42,7 @@ class UserRepository(IUserRepository):
         result = await self.session.execute(
             delete(User).where(User.id == user_id)
         )
-        await self.session.commit()
+        await self.session.flush()
         return result.rowcount > 0
     
     async def get_unapproved_admins(self) -> list[User]:

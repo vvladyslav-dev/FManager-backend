@@ -1,19 +1,17 @@
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from uuid import UUID
 
-from app.core.database import get_db
+from fastapi import Depends, HTTPException, status, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 from app.core.auth import decode_access_token
 from app.domain.models import User
-from app.infrastructure.repositories.user_repository import UserRepository
-from sqlalchemy.ext.asyncio import AsyncSession
 
 security = HTTPBearer()
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_db)
 ) -> User:
     """Get current authenticated user from JWT token."""
     token = credentials.credentials
@@ -34,8 +32,9 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Get user from database
-    user_repository = UserRepository(session=db)
+    # Get user from database using container from middleware
+    container = request.state.container
+    user_repository = container.user_repository()
     user = await user_repository.get_by_id(UUID(user_id))
     
     if user is None:

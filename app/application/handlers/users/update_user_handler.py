@@ -1,32 +1,35 @@
-from dataclasses import dataclass
 from uuid import UUID
-from typing import Optional
-from mediatr import GenericQuery
+from pydantic import BaseModel
+from mediatr import GenericQuery, Mediator
+from dependency_injector.wiring import inject, Provide
+from app.core.container import Container  # noqa: F401
 
 from app.application.ports.usecase import UseCase
 from app.domain.models import User
 from app.domain.repositories.user_repository import IUserRepository
+from app.application.dto.models import UserDTO
+from typing import TYPE_CHECKING
 
 
-@dataclass
-class UpdateUserResponse:
+class UpdateUserResponse(BaseModel):
     """Response containing updated user."""
-    user: User
+    user: UserDTO
 
 
-@dataclass
-class UpdateUserRequest(GenericQuery[UpdateUserResponse]):
+class UpdateUserRequest(BaseModel, GenericQuery[UpdateUserResponse]):
     """Request for updating a user."""
     user_id: UUID
-    name: Optional[str] = None
-    email: Optional[str] = None
-    is_admin: Optional[bool] = None
+    name: str | None = None
+    email: str | None = None
+    is_admin: bool | None = None
 
 
+@Mediator.handler
 class UpdateUserHandler(UseCase[UpdateUserRequest, UpdateUserResponse]):
     """Use case for updating a user."""
     
-    def __init__(self, user_repository: IUserRepository):
+    @inject
+    def __init__(self, user_repository: IUserRepository = Provide[Container.user_repository]):
         self.user_repository = user_repository
     
     async def handle(self, request: UpdateUserRequest) -> UpdateUserResponse:
@@ -42,5 +45,14 @@ class UpdateUserHandler(UseCase[UpdateUserRequest, UpdateUserResponse]):
             setattr(user, 'is_admin', request.is_admin)
         
         updated_user = await self.user_repository.update(user)
-        return UpdateUserResponse(user=updated_user)
+        return UpdateUserResponse(user=UserDTO(
+            id=updated_user.id,
+            name=updated_user.name,
+            email=updated_user.email,
+            is_admin=updated_user.is_admin,
+            is_super_admin=updated_user.is_super_admin,
+            is_approved=updated_user.is_approved,
+            admin_id=updated_user.admin_id,
+            created_at=getattr(updated_user, 'created_at', None)
+        ))
 

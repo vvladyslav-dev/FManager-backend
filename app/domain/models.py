@@ -1,10 +1,45 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Integer
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Integer, JSON, Enum as SQLEnum, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
+from enum import Enum
 
 from app.core.database import Base
+
+
+class NotificationChannelType(str, Enum):
+    """Supported notification channel types"""
+    TELEGRAM = "telegram"
+
+
+class NotificationChannel(Base):
+    """
+    Notification channels table.
+    Supports Telegram notifications.
+    
+    Config structure:
+    - telegram: {"chat_id": str}
+    """
+    __tablename__ = "notification_channels"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    channel_type = Column(SQLEnum(NotificationChannelType), nullable=False)
+    is_enabled = Column(Boolean, default=False, nullable=False)
+    config = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    user = relationship("User", back_populates="notification_channels")
+    
+    __table_args__ = (
+        UniqueConstraint('user_id', 'channel_type', name='uq_user_channel_type'),
+    )
+    
+    def __repr__(self):
+        return f"<NotificationChannel(user_id={self.user_id}, type={self.channel_type.value}, enabled={self.is_enabled})>"
 
 
 class User(Base):
@@ -14,6 +49,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=True, index=True)
     name = Column(String(255), nullable=False)
     password_hash = Column(String(255), nullable=True)  # For admin users with authentication
+    avatar_url = Column(String(1000), nullable=True)
     is_admin = Column(Boolean, default=False, nullable=False)
     is_super_admin = Column(Boolean, default=False, nullable=False)
     is_approved = Column(Boolean, default=True, nullable=False)  # For admins: False until approved by super admin
@@ -24,9 +60,10 @@ class User(Base):
     created_forms = relationship("Form", back_populates="creator", foreign_keys="Form.creator_id")
     submissions = relationship("FormSubmission", back_populates="user")
     admin_users = relationship("User", remote_side=[id], foreign_keys=[admin_id])
+    notification_channels = relationship("NotificationChannel", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<User(id={self.id}, name={self.name}, is_admin={self.is_admin}, is_super_admin={self.is_super_admin}, is_approved={self.is_approved})>"
+        return f"<User(id={self.id}, name={self.name}, is_admin={self.is_admin})>"
 
 
 class Form(Base):

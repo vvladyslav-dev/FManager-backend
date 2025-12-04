@@ -1,24 +1,26 @@
-from dataclasses import dataclass
 from uuid import uuid4
-from mediatr import GenericQuery
+from pydantic import BaseModel
+from mediatr import GenericQuery, Mediator
+from dependency_injector.wiring import inject, Provide
+from app.core.container import Container  # noqa: F401
 
 from app.application.ports.usecase import UseCase
 from app.domain.models import User
 from app.domain.repositories.user_repository import IUserRepository
 from app.core.auth import get_password_hash, create_access_token
+from app.application.dto.models import UserDTO
+from typing import TYPE_CHECKING
 
 
-@dataclass
-class RegisterResponse:
+class RegisterResponse(BaseModel):
     """Response containing access token and user."""
     access_token: str
-    user: User
+    user: UserDTO
     token_type: str = "bearer"
 
 
 
-@dataclass
-class RegisterRequest(GenericQuery[RegisterResponse]):
+class RegisterRequest(BaseModel, GenericQuery[RegisterResponse]):
     """Request for user registration."""
     email: str
     password: str
@@ -26,10 +28,12 @@ class RegisterRequest(GenericQuery[RegisterResponse]):
     is_admin: bool = False
 
 
+@Mediator.handler
 class RegisterHandler(UseCase[RegisterRequest, RegisterResponse]):
     """Use case for user registration."""
     
-    def __init__(self, user_repository: IUserRepository):
+    @inject
+    def __init__(self, user_repository: IUserRepository = Provide[Container.user_repository]):
         self.user_repository = user_repository
     
     async def handle(self, request: RegisterRequest) -> RegisterResponse:
@@ -59,7 +63,17 @@ class RegisterHandler(UseCase[RegisterRequest, RegisterResponse]):
             # Return response without token - admin needs approval
             return RegisterResponse(
                 access_token="",  # Empty token - admin cannot login yet
-                user=created_user
+                user=UserDTO(
+                    id=created_user.id,
+                    name=created_user.name,
+                    email=created_user.email,
+                    is_admin=created_user.is_admin,
+                    is_super_admin=created_user.is_super_admin,
+                    is_approved=created_user.is_approved,
+                    admin_id=created_user.admin_id,
+                    avatar_url=getattr(created_user, 'avatar_url', None),
+                    created_at=getattr(created_user, 'created_at', None)
+                )
             )
         
         # Create access token for regular users
@@ -67,6 +81,16 @@ class RegisterHandler(UseCase[RegisterRequest, RegisterResponse]):
         
         return RegisterResponse(
             access_token=access_token,
-            user=created_user
+            user=UserDTO(
+                id=created_user.id,
+                name=created_user.name,
+                email=created_user.email,
+                is_admin=created_user.is_admin,
+                is_super_admin=created_user.is_super_admin,
+                is_approved=created_user.is_approved,
+                admin_id=created_user.admin_id,
+                avatar_url=getattr(created_user, 'avatar_url', None),
+                created_at=getattr(created_user, 'created_at', None)
+            )
         )
 

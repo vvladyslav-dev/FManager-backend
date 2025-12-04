@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
 from uuid import UUID
 from app.domain.models import User
 
@@ -10,15 +9,15 @@ class IUserRepository(ABC):
         pass
     
     @abstractmethod
-    async def get_by_id(self, user_id: UUID) -> Optional[User]:
+    async def get_by_id(self, user_id: UUID) -> User | None:
         pass
     
     @abstractmethod
-    async def get_by_email(self, email: str) -> Optional[User]:
+    async def get_by_email(self, email: str) -> User | None:
         pass
     
     @abstractmethod
-    async def get_by_admin_id(self, admin_id: UUID) -> List[User]:
+    async def get_by_admin_id(self, admin_id: UUID) -> list[User]:
         pass
     
     @abstractmethod
@@ -30,7 +29,7 @@ class IUserRepository(ABC):
         pass
     
     @abstractmethod
-    async def get_unapproved_admins(self) -> List[User]:
+    async def get_unapproved_admins(self) -> list[User]:
         """Get all admin users that are not approved yet."""
         pass
 

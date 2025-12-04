@@ -10,7 +10,7 @@ class FileRepository(IFileRepository):
     
     async def create(self, file: File) -> File:
         self.session.add(file)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(file)
         return file
     

@@ -1,28 +1,32 @@
-from dataclasses import dataclass
 from uuid import UUID
-from mediatr import GenericQuery
+from pydantic import BaseModel
+from mediatr import GenericQuery, Mediator
+from dependency_injector.wiring import inject, Provide
 
 from app.application.ports.usecase import UseCase
 from app.domain.models import User
 from app.domain.repositories.user_repository import IUserRepository
+from app.application.dto.models import UserDTO
+from app.core.container import Container
 
 
-@dataclass
-class ApproveAdminResponse:
+
+class ApproveAdminResponse(BaseModel):
     """Response containing approved admin user."""
-    user: User
+    user: UserDTO
 
 
-@dataclass
-class ApproveAdminRequest(GenericQuery[ApproveAdminResponse]):
+class ApproveAdminRequest(BaseModel, GenericQuery[ApproveAdminResponse]):
     """Request for approving an admin user."""
     user_id: UUID
 
 
+@Mediator.handler
 class ApproveAdminHandler(UseCase[ApproveAdminRequest, ApproveAdminResponse]):
     """Use case for approving an admin user registration."""
     
-    def __init__(self, user_repository: IUserRepository):
+    @inject
+    def __init__(self, user_repository: IUserRepository = Provide[Container.user_repository]):
         self.user_repository = user_repository
     
     async def handle(self, request: ApproveAdminRequest) -> ApproveAdminResponse:
@@ -45,6 +49,15 @@ class ApproveAdminHandler(UseCase[ApproveAdminRequest, ApproveAdminResponse]):
         setattr(user, 'is_approved', True)
         updated_user = await self.user_repository.update(user)
         
-        return ApproveAdminResponse(user=updated_user)
+        return ApproveAdminResponse(user=UserDTO(
+            id=updated_user.id,
+            name=updated_user.name,
+            email=updated_user.email,
+            is_admin=updated_user.is_admin,
+            is_super_admin=updated_user.is_super_admin,
+            is_approved=updated_user.is_approved,
+            admin_id=updated_user.admin_id,
+            created_at=getattr(updated_user, 'created_at', None)
+        ))
 
 

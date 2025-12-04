@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     
+    # Frontend
+    frontend_url: str = "http://localhost:3000"
+    
+    # Telegram Bot
+    telegram_bot_token: str | None = None
+    telegram_bot_webhook_url: str | None = None
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False

@@ -12,7 +12,7 @@ class FormRepository(IFormRepository):
     
     async def create(self, form: Form) -> Form:
         self.session.add(form)
-        await self.session.commit()
+        await self.session.flush()
         # Reload form with fields to avoid lazy loading issues
         form_id = form.id
         result = await self.session.execute(
@@ -42,7 +42,7 @@ class FormRepository(IFormRepository):
         return list(result.scalars().all())
     
     async def update(self, form: Form) -> Form:
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(form)
         form_id = form.id
         result = await self.session.execute(
@@ -57,6 +57,6 @@ class FormRepository(IFormRepository):
         if not form:
             return False
         await self.session.delete(form)
-        await self.session.commit()
+        await self.session.flush()
         return True
 

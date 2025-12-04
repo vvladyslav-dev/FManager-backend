@@ -2,7 +2,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 from app.domain.models import FormSubmission, Form, User, FormFieldValue
 from app.domain.repositories.form_submission_repository import IFormSubmissionRepository
@@ -14,7 +13,7 @@ class FormSubmissionRepository(IFormSubmissionRepository):
     
     async def create(self, submission: FormSubmission) -> FormSubmission:
         self.session.add(submission)
-        await self.session.commit()
+        await self.session.flush()
         # Reload submission with all related objects to avoid lazy loading issues
         submission_id = submission.id
         result = await self.session.execute(
@@ -77,12 +76,12 @@ class FormSubmissionRepository(IFormSubmissionRepository):
         admin_id, 
         skip: int = 0, 
         limit: int = 10,
-        date_from: Optional[datetime] = None,
-        date_to: Optional[datetime] = None,
-        user_name: Optional[str] = None,
-        user_email: Optional[str] = None,
-        field_value_search: Optional[str] = None,
-        form_id: Optional[UUID] = None
+        date_from: datetime | None = None,
+        date_to: datetime | None = None,
+        user_name: str | None = None,
+        user_email: str | None = None,
+        field_value_search: str | None = None,
+        form_id: UUID | None = None
     ):
         # Get submissions for forms created by admin and users created by admin
         query = (
@@ -147,6 +146,6 @@ class FormSubmissionRepository(IFormSubmissionRepository):
         if not submission:
             return False
         await self.session.delete(submission)
-        await self.session.commit()
+        await self.session.flush()
         return True
 

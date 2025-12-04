@@ -1,21 +1,22 @@
-from dataclasses import dataclass
 from uuid import UUID, uuid4
-from typing import Optional
-from mediatr import GenericQuery
+from pydantic import BaseModel
+from mediatr import GenericQuery, Mediator
+from dependency_injector.wiring import inject, Provide
+from app.core.container import Container  # noqa: F401
 
 from app.application.ports.usecase import UseCase
 from app.domain.models import User
 from app.domain.repositories.user_repository import IUserRepository
+from app.application.dto.models import UserDTO
+from typing import TYPE_CHECKING
 
 
-@dataclass
-class CreateUserResponse:
+class CreateUserResponse(BaseModel):
     """Response containing created user."""
-    user: User
+    user: UserDTO
 
 
-@dataclass
-class CreateUserRequest(GenericQuery[CreateUserResponse]):
+class CreateUserRequest(BaseModel, GenericQuery[CreateUserResponse]):
     """Request for creating a new user.
     
     Use case: Creates a new user in the system.
@@ -38,11 +39,12 @@ class CreateUserRequest(GenericQuery[CreateUserResponse]):
     - Useful for creating top-level administrators (is_admin=True)
     """
     name: str
-    email: Optional[str] = None
+    email: str | None = None
     is_admin: bool = False
-    admin_id: Optional[UUID] = None
+    admin_id: UUID | None = None
 
 
+@Mediator.handler
 class CreateUserHandler(UseCase[CreateUserRequest, CreateUserResponse]):
     """Use case for creating a new user.
     
@@ -50,7 +52,8 @@ class CreateUserHandler(UseCase[CreateUserRequest, CreateUserResponse]):
     The admin_id field enables multi-tenant data isolation.
     """
     
-    def __init__(self, user_repository: IUserRepository):
+    @inject
+    def __init__(self, user_repository: IUserRepository = Provide[Container.user_repository]):
         self.user_repository = user_repository
     
     async def handle(self, request: CreateUserRequest) -> CreateUserResponse:
@@ -72,5 +75,16 @@ class CreateUserHandler(UseCase[CreateUserRequest, CreateUserResponse]):
             admin_id=request.admin_id  # Links user to administrator for data isolation
         )
         created_user = await self.user_repository.create(user)
-        return CreateUserResponse(user=created_user)
+        return CreateUserResponse(
+            user=UserDTO(
+                id=created_user.id,
+                name=created_user.name,
+                email=created_user.email,
+                is_admin=created_user.is_admin,
+                is_super_admin=created_user.is_super_admin,
+                is_approved=created_user.is_approved,
+                admin_id=created_user.admin_id,
+                created_at=getattr(created_user, 'created_at', None)
+            )
+        )
 

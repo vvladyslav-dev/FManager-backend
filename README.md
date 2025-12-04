@@ -25,9 +25,16 @@ cd FManager-backend
 Create a `.env` file in the project root:
 
 ```env
+# Required
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/fmanager_db
 SECRET_KEY=your-secret-key
 AZURE_STORAGE_CONNECTION_STRING=your-azure-connection-string
+
+# Optional - Telegram Notifications
+# Leave empty or omit these lines if you don't want to use Telegram notifications
+TELEGRAM_BOT_TOKEN=your-bot-token-from-botfather
+TELEGRAM_BOT_WEBHOOK_URL=https://yourdomain.com/api/v1/telegram/webhook
+FRONTEND_URL=http://localhost:3000
 ```
 
 ### 3. Run with Docker

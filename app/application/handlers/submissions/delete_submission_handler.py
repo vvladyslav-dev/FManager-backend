@@ -1,27 +1,30 @@
-from dataclasses import dataclass
 from uuid import UUID
-from mediatr import GenericQuery
+from pydantic import BaseModel
+from mediatr import GenericQuery, Mediator
+from dependency_injector.wiring import inject, Provide
+from app.core.container import Container  # noqa: F401
 
 from app.application.ports.usecase import UseCase
 from app.domain.repositories.form_submission_repository import IFormSubmissionRepository
+from typing import TYPE_CHECKING
 
 
-@dataclass
-class DeleteSubmissionResponse:
+class DeleteSubmissionResponse(BaseModel):
     """Response for submission deletion."""
     success: bool
 
 
-@dataclass
-class DeleteSubmissionRequest(GenericQuery[DeleteSubmissionResponse]):
+class DeleteSubmissionRequest(BaseModel, GenericQuery[DeleteSubmissionResponse]):
     """Request for deleting a submission."""
     submission_id: UUID
 
 
+@Mediator.handler
 class DeleteSubmissionHandler(UseCase[DeleteSubmissionRequest, DeleteSubmissionResponse]):
     """Use case for deleting a submission."""
     
-    def __init__(self, submission_repository: IFormSubmissionRepository):
+    @inject
+    def __init__(self, submission_repository: IFormSubmissionRepository = Provide[Container.form_submission_repository]):
         self.submission_repository = submission_repository
     
     async def handle(self, request: DeleteSubmissionRequest) -> DeleteSubmissionResponse:

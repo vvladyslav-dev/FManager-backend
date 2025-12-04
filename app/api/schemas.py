@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import Optional, List, Dict, Any
+from typing import Any, Optional, Dict
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -12,8 +12,8 @@ class FormFieldSchema(BaseModel):
     name: str
     is_required: bool
     order: int
-    options: Optional[str] = None
-    placeholder: Optional[str] = None
+    options: str | None = None
+    placeholder: str | None = None
     
     class Config:
         from_attributes = True
@@ -22,10 +22,10 @@ class FormFieldSchema(BaseModel):
 class FormSchema(BaseModel):
     id: UUID
     title: str
-    description: Optional[str] = None
+    description: str | None = None
     creator_id: UUID
     created_at: datetime
-    fields: List[FormFieldSchema] = []
+    fields: list[FormFieldSchema] = []
     
     class Config:
         from_attributes = True
@@ -33,21 +33,21 @@ class FormSchema(BaseModel):
 
 class CreateFormRequest(BaseModel):
     title: str
-    description: Optional[str] = None
-    fields: List[Dict[str, Any]]
+    description: str | None = None
+    fields: list[dict[str, Any]]
 
 
 class UpdateFormRequest(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    fields: Optional[List[Dict[str, Any]]] = None
+    title: str | None = None
+    description: str | None = None
+    fields: list[dict[str, Any]] | None = None
 
 
 # Form Submission schemas
 class FormFieldValueSchema(BaseModel):
     id: UUID
     field_id: UUID
-    value: Optional[str] = None
+    value: str | None = None
     
     class Config:
         from_attributes = True
@@ -55,11 +55,11 @@ class FormFieldValueSchema(BaseModel):
 
 class FileSchema(BaseModel):
     id: UUID
-    field_id: Optional[UUID] = None
+    field_id: UUID | None = None
     original_filename: str
     blob_url: str
     file_size: int
-    content_type: Optional[str] = None
+    content_type: str | None = None
     
     class Config:
         from_attributes = True
@@ -68,11 +68,11 @@ class FileSchema(BaseModel):
 class UserSchema(BaseModel):
     id: UUID
     name: str
-    email: Optional[str] = None
+    email: str | None = None
     is_admin: bool
     is_super_admin: bool = False
     is_approved: bool = True
-    admin_id: Optional[UUID] = None
+    admin_id: UUID | None = None
     created_at: datetime
     
     class Config:
@@ -81,15 +81,15 @@ class UserSchema(BaseModel):
 
 class CreateUserRequest(BaseModel):
     name: str
-    email: Optional[str] = None
+    email: str | None = None
     is_admin: bool = False
-    admin_id: Optional[UUID] = None
+    admin_id: UUID | None = None
 
 
 class UpdateUserRequest(BaseModel):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    is_admin: Optional[bool] = None
+    name: str | None = None
+    email: str | None = None
+    is_admin: bool | None = None
 
 
 class FormSubmissionSchema(BaseModel):
@@ -97,10 +97,10 @@ class FormSubmissionSchema(BaseModel):
     form_id: UUID
     user_id: UUID
     submitted_at: datetime
-    user: Optional[UserSchema] = None
-    form: Optional[FormSchema] = None
-    field_values: List[FormFieldValueSchema] = []
-    files: List[FileSchema] = []
+    user: UserSchema | None = None
+    form: FormSchema | None = None
+    field_values: list[FormFieldValueSchema] = []
+    files: list[FileSchema] = []
     
     class Config:
         from_attributes = True
@@ -108,9 +108,9 @@ class FormSubmissionSchema(BaseModel):
 
 class SubmitFormRequest(BaseModel):
     user_name: str
-    user_email: Optional[str] = None
-    field_values: Dict[str, Any]  # field_id -> value
-    files: Optional[Dict[str, Any]] = None  # field_id -> file data
+    user_email: str | None = None
+    field_values: dict[str, Any]  # field_id -> value
+    files: dict[str, Any] | None = None  # field_id -> file data
 
 
 # Auth schemas
@@ -124,4 +124,24 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+# Notification settings schemas
+class NotificationSettingsUpdate(BaseModel):
+    """Schema for updating notification settings"""
+    telegram_chat_id: Optional[str] = None
+    telegram_notifications_enabled: Optional[bool] = None
+    email_notifications_enabled: Optional[bool] = None
+    notification_preferences: Optional[Dict[str, Any]] = None
+
+
+class NotificationSettingsResponse(BaseModel):
+    """Schema for notification settings response"""
+    telegram_chat_id: Optional[str]
+    telegram_notifications_enabled: bool
+    email_notifications_enabled: bool
+    notification_preferences: Optional[Dict[str, Any]]
+    
+    class Config:
+        from_attributes = True
 

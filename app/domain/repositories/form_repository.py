@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
 from uuid import UUID
 from app.domain.models import Form
 
@@ -10,11 +9,11 @@ class IFormRepository(ABC):
         pass
     
     @abstractmethod
-    async def get_by_id(self, form_id: UUID) -> Optional[Form]:
+    async def get_by_id(self, form_id: UUID) -> Form | None:
         pass
     
     @abstractmethod
-    async def get_by_creator_id(self, creator_id: UUID, skip: int = 0, limit: int = 10) -> List[Form]:
+    async def get_by_creator_id(self, creator_id: UUID, skip: int = 0, limit: int = 10) -> list[Form]:
         pass
     
     @abstractmethod

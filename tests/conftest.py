@@ -4,11 +4,15 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.pool import StaticPool
 from httpx import AsyncClient
 from uuid import uuid4
+import importlib
+import pkgutil
 
 from app.main import app
-from app.core.database import Base, get_db
-from app.core.azure_storage import azure_storage_client
+from app.core.database import Base
+from app.infrastructure.services.azure_storage import azure_storage_client
+from app.core.container import container
 from app.domain.models import User
+import app.application.handlers as handlers_pkg
 
 
 # Test database URL (in-memory SQLite for testing)
@@ -26,6 +30,20 @@ TestSessionLocal = async_sessionmaker(
 )
 
 
+def _import_all_handlers():
+    """Import all handlers to register with Mediator."""
+    for module_info in pkgutil.walk_packages(handlers_pkg.__path__, handlers_pkg.__name__ + "."):
+        try:
+            importlib.import_module(module_info.name)
+        except Exception:
+            pass
+
+
+# Register handlers once for all tests
+_import_all_handlers()
+container.wire(packages=["app.application.handlers"])
+
+
 @pytest.fixture(scope="function")
 async def db_session():
     """Create a test database session."""
@@ -41,16 +59,12 @@ async def db_session():
 
 @pytest.fixture(scope="function")
 async def client(db_session):
-    """Create a test client with database override."""
-    async def override_get_db():
-        yield db_session
-    
-    app.dependency_overrides[get_db] = override_get_db
-    
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        yield ac
-    
-    app.dependency_overrides.clear()
+    """Create a test client using the test DB session factory in middleware."""
+    from unittest.mock import patch
+    # Ensure middleware uses the test session factory bound to in-memory DB
+    with patch('app.core.middleware.AsyncSessionLocal', TestSessionLocal):
+        async with AsyncClient(app=app, base_url="http://test") as ac:
+            yield ac
 
 
 @pytest.fixture(scope="function")
