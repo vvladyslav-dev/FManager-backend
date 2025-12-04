@@ -164,9 +164,13 @@ async def delete_submission(
 async def export_submission(
     submission_id: UUID,
     format: str = Query(..., regex="^(csv|xlsx)$", description="Export format: csv or xlsx"),
-    locale: str = Query("en", regex="^(en|uk)$", description="Locale: en or uk"),
+    locale: str = Query("en", description="Locale: en or uk (defaults to en for unknown values)"),
 ):
     """Export a submission to CSV or XLSX format"""
+    # Validate locale, fallback to 'en' if unknown
+    if locale not in ["en", "uk"]:
+        locale = "en"
+    
     try:
         use_case_request = ExportSubmissionRequest(
             submission_id=submission_id,
