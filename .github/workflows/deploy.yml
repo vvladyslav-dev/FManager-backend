@@ -15,10 +15,6 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     
-    defaults:
-      run:
-        working-directory: .
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -28,12 +24,18 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies for migrations
-        run: pip install alembic psycopg2-binary sqlalchemy
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Run Alembic Migrations
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SECRET_KEY: "pipeline-secret-key"
+          TELEGRAM_BOT_TOKEN: "dummy"
+          AZURE_STORAGE_CONNECTION_STRING: "dummy"
+          AZURE_STORAGE_CONTAINER_NAME: "dummy"
         run: alembic upgrade head
 
       - name: Log in to Azure
